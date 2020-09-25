@@ -1,0 +1,43 @@
+FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04
+
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+
+ARG BUILD_EXTR_PAR
+
+# Avoid moving everything early because ADD resets the build (forces docker to rebuild from scratch every time and can't use cache)
+RUN mkdir -p /tmp/scripts
+ADD scripts/install_ubuntu.sh /tmp/scripts/
+ADD scripts/install_deps.sh /tmp/scripts/
+
+RUN chmod -R 777 /tmp/scripts
+RUN /tmp/scripts/install_ubuntu.sh
+RUN /tmp/scripts/install_deps.sh -d gpu -x "$BUILD_EXTR_PAR"
+
+WORKDIR /root
+
+# Allow configure to pick up GDK and CuDNN where it expects it.
+# (Note: $CUDNN_VERSION is defined by NVidia's base image)
+RUN _CUDNN_VERSION=$(echo $CUDNN_VERSION | cut -d. -f1-2) && \
+    mkdir -p /usr/local/cudnn-$_CUDNN_VERSION/cuda/include && \
+    ln -s /usr/include/cudnn.h /usr/local/cudnn-$_CUDNN_VERSION/cuda/include/cudnn.h && \
+    mkdir -p /usr/local/cudnn-$_CUDNN_VERSION/cuda/lib64 && \
+    ln -s /etc/alternatives/libcudnn_so /usr/local/cudnn-$_CUDNN_VERSION/cuda/lib64/libcudnn.so && \
+    ln -s /usr/local/cudnn{-$_CUDNN_VERSION,}
+
+ENV LD_LIBRARY_PATH /usr/local/openblas/lib:$LD_LIBRARY_PATH
+
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+ADD scripts/install_python.sh /tmp/scripts
+ADD scripts/requirements.txt /tmp/scripts
+RUN chmod -R 777 /tmp/scripts
+
+RUN useradd -m ${USER} --uid=${UID}
+RUN adduser ${USER} sudo
+WORKDIR /home/${USER}
+USER ${UID}
+
+RUN bash -i /tmp/scripts/install_python.sh
+RUN sudo rm -rf /tmp/scripts

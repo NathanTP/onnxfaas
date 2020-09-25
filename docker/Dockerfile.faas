@@ -1,0 +1,21 @@
+FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+
+RUN apt-get update
+
+RUN apt-get -y install vim wget libgl1-mesa-glx libegl1-mesa libxrandr2 libxrandr2 libxss1 libxcursor1 libxcomposite1 libasound2 libxi6 libxtst6 less
+
+RUN useradd -m ${USER} --uid=${UID}
+RUN adduser ${USER} sudo
+
+WORKDIR /home/${USER}
+ADD docker_init.sh .
+RUN chown ${UID} docker_init.sh
+
+USER ${UID}
+
+# Has to be -i (interactive) because .bashrc won't source otherwise (docker_init.sh has to source .bashrc internally)
+RUN bash -i ./docker_init.sh

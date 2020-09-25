@@ -1,6 +1,0 @@
-FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
-
-ADD scripts/docker_init.sh /tmp/
-
-# Has to be -i (interactive) because .bashrc won't source otherwise (docker_init.sh has to source .bashrc internally)
-RUN bash -i /tmp/docker_init.sh
