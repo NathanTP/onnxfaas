@@ -16,9 +16,10 @@ def imports():
 
 def initFer(profile=False, provider="CUDAExecutionProvider"):
     opts = onnxruntime.SessionOptions()
-    # opts.optimized_model_filepath = "optModel.onnx"
+    opts.optimized_model_filepath = "optModel.onnx"
 
-    opts.enable_profiling = profile 
+    print("Provider: ", provider)
+    # opts.enable_profiling = profile 
 
     # ferModelPath="./optModel.onnx"
     ferSession = onnxruntime.InferenceSession(

@@ -20,6 +20,7 @@ pip install matplotlib \
   sklearn \
   sympy==1.1.1 \
   transformers==v2.10.0 \
+  py-spy
 
 pip install -r /tmp/scripts/requirements.txt
 
