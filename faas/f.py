@@ -1,6 +1,7 @@
 import cProfile
 from contextlib import contextmanager
-import ferplus
+import models.ferplus as ferplus
+import models.bertsquad as bertsquad 
 import time
 import argparse
 
@@ -15,17 +16,17 @@ def timer(name, timers):
        timers[name] += time.time() - start
 
 
-def runTest(model, state, niter=1):
-    inputs = model.inputs()
+def runTest(state, niter=1):
+    inputs = state.inputs()
 
     for repeat in range(niter):
         for testIn in inputs:
-            processed = model.pre(testIn)
+            processed = state.pre(testIn)
 
             # predict using the deployed model
-            modelOut = model.run(state, processed)
+            modelOut = state.run(processed)
 
-            finalOut = model.post(modelOut)
+            finalOut = state.post(modelOut)
 
 
 def main(model, profile=False, niter=1, use_gpu=True):
@@ -37,24 +38,24 @@ def main(model, profile=False, niter=1, use_gpu=True):
 
         with timer("init", times):
             if use_gpu:
-                state = model.init(profile=profile, provider="CUDAExecutionProvider")
+                state = model(profile=profile, provider="CUDAExecutionProvider") 
             else:
-                state = model.init(profile=profile, provider="CPUExecutionProvider")
+                state = model(profile=profile, provider="CPUExecutionProvider") 
 
         with timer("run", times):
-            runTest(model, state, niter=niter)
+            runTest(state, niter=niter)
 
-        prof_file = state['session'].end_profiling()
+        prof_file = state.session.end_profiling()
         print("onnxruntime profile at: ", prof_file)
         print("Times: ")
         print(times)
     else:
         model.imports()
         if use_gpu:
-            state = model.init(profile=profile, provider="CUDAExecutionProvider") 
+            state = model(profile=profile, provider="CUDAExecutionProvider") 
         else:
-            state = model.init(profile=profile, provider="CPUExecutionProvider") 
-        runTest(model, state, niter=niter)
+            state = model(profile=profile, provider="CPUExecutionProvider") 
+        runTest(state, niter=niter)
 
 
 if __name__ == "__main__":
@@ -63,13 +64,18 @@ if __name__ == "__main__":
             help="use CPU execution provider (rather than the default CUDA provider)")
     parser.add_argument("-p", "--profile", action='store_true', help="Enable self-profiling")
     parser.add_argument("-n", "--niter", type=int, default=1, help="Number of test iterations to perform")
+    parser.add_argument("-m", "--model", type=str, default="ferplus", help="Which model to run, either 'bertsquad' or 'ferplus'")
 
     args = parser.parse_args()
 
-    model = ferplus.interface
+    if args.model == "ferplus":
+        model = ferplus.Model
+    elif args.model == "bertsquad":
+        model = bertsquad.Model
+
     main(model, profile=args.profile, niter=args.niter, use_gpu = not args.cpu)
 
-    # # Cprofile
-    # # profFile = "fer10kGPU.prof"
-    # # cProfile.runctx("main(profile=False, niter=niter)", globals=globals(), locals=locals(), sort="cumulative", filename=profFile)
-    # # print("Profile at: ", profFile)
+    # Cprofile
+    # profFile = "fer10kGPU.prof"
+    # cProfile.runctx("main(profile=False, niter=niter)", globals=globals(), locals=locals(), sort="cumulative", filename=profFile)
+    # print("Profile at: ", profFile)

@@ -1,0 +1,34 @@
+FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+
+RUN apt-get update
+
+RUN apt-get -y install vim wget libgl1-mesa-glx libegl1-mesa libxrandr2 libxrandr2 libxss1 libxcursor1 libxcomposite1 libasound2 libxi6 libxtst6 less sudo zip software-properties-common
+
+# Old version of git in ubuntu (2.7.4) has a bug where recursive submodules use
+# absolute paths. This is a nightmare with docker because the repo is at a
+# different absolute path on docker vs the host and the whole repo gets broken.
+# We add this repo to get the latest version that fixes the bug.
+RUN add-apt-repository -y ppa:git-core/ppa
+RUN apt-get update
+RUN apt-get -y install git
+
+
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+RUN useradd -m ${USER} --uid=${UID}
+RUN adduser ${USER} sudo
+
+WORKDIR /home/${USER}
+
+ADD scripts/install_python.sh .
+ADD scripts/requirements.txt .
+RUN chmod -R 777 install_python.sh requirements.txt
+
+USER ${UID}
+
+# Has to be -i (interactive) because .bashrc won't source otherwise (docker_init.sh has to source .bashrc internally)
+RUN bash -i ./install_python.sh

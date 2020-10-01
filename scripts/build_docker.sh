@@ -5,6 +5,6 @@ DOCKERARGS="--build-arg USER=$USER --build-arg UID=$(id -u) --build-arg GID=$(id
 echo $DOCKERARGS
 
 pushd ../docker
-# docker build $DOCKERARGS --tag onnxfaas:deploy -f ../docker/Dockerfile.faas .
-docker build $DOCKERARGS --tag onnxfaas:build -f ../docker/Dockerfile.build .
+docker build $DOCKERARGS --tag onnxfaas:deploy -f ../docker/Dockerfile.deploy .
+# docker build $DOCKERARGS --tag onnxfaas:build -f ../docker/Dockerfile.build .
 popd

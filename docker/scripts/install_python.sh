@@ -1,6 +1,8 @@
 #!/bin/bash
 set -ex
 
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+
 cd ~
 
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -22,7 +24,7 @@ pip install matplotlib \
   transformers==v2.10.0 \
   py-spy
 
-pip install -r /tmp/scripts/requirements.txt
+pip install -r $SCRIPT_DIR/requirements.txt
 
 # Install pytorch from source because the binary distribution from pip doesn't support all CUDA drivers.
 # Following instructions here: https://github.com/pytorch/pytorch#from-source
