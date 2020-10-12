@@ -39,7 +39,8 @@ def timer(name, timers):
 def runTest(state, niter=1, profTimes=None, serialize=False):
     inputs = state.inputs()
 
-    kv = redis.Redis(password="Cd+OBWBEAXV0o2fg5yDrMjD9JUkW7J6MATWuGlRtkQXk/CBvf2HYEjKDYw4FC+eWPeVR8cQKWr7IztZy")
+    if serialize:
+        kv = redis.Redis(password="Cd+OBWBEAXV0o2fg5yDrMjD9JUkW7J6MATWuGlRtkQXk/CBvf2HYEjKDYw4FC+eWPeVR8cQKWr7IztZy")
 
     for repeat in range(niter):
         for i, testIn in enumerate(inputs):
@@ -69,9 +70,11 @@ def runTest(state, niter=1, profTimes=None, serialize=False):
 
                     finalOut = state.post(modelOut)
 
-                    kv.set(iterID+".final", pickle.dumps(finalOut))
+                    if serialize:
+                        kv.set(iterID+".final", pickle.dumps(finalOut))
 
-                kv.delete(iterID+".pre", iterID+".run", iterID+".final")
+                if serialize:
+                    kv.delete(iterID+".pre", iterID+".run", iterID+".final")
             else:
                 processed = state.pre(testIn)
                 modelOut = state.run(processed)

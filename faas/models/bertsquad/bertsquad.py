@@ -47,7 +47,7 @@ class Model:
 
         opts = onnxruntime.SessionOptions()
         opts.optimized_model_filepath = str(modulePath / "optModel.onnx")
-        opts.enable_profiling = profile 
+        # opts.enable_profiling = profile 
         modelPath = modulePath / 'bertsquad-10.onnx'
 
         self.session = onnxruntime.InferenceSession(
