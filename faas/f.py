@@ -6,6 +6,8 @@ import time
 import argparse
 import redis
 import pickle
+import fakefaas
+import fakefaas.kv
 
 class prof:
     def __init__(self):
@@ -36,85 +38,64 @@ def timer(name, timers):
        timers[name].increment((time.time()*timeScale) - start)
 
 
-def runTest(state, niter=1, profTimes=None, serialize=False):
+def runTest(state, objStore, profTimes, niter=1):
     inputs = state.inputs()
-
-    if serialize:
-        kv = redis.Redis(password="Cd+OBWBEAXV0o2fg5yDrMjD9JUkW7J6MATWuGlRtkQXk/CBvf2HYEjKDYw4FC+eWPeVR8cQKWr7IztZy")
 
     for repeat in range(niter):
         for i, testIn in enumerate(inputs):
             iterID = "{}.{}".format(repeat, i)
-            if profTimes is not None:
-                with timer("pre", profTimes):
-                    processed = state.pre(testIn)
-                    if serialize:
-                        kv.set(iterID+".pre", pickle.dumps(processed))
-
-                with timer("run", profTimes):
-                    if serialize:
-                        desProcessed = pickle.loads(kv.get(iterID+".pre"))
-                    else:
-                        desProcessed = processed
-
-                    modelOut = state.run(desProcessed)
-
-                    if serialize:
-                        kv.set(iterID+".run", pickle.dumps(modelOut))
-
-                with timer("post", profTimes):
-                    if serialize:
-                        desModelOut = pickle.loads(kv.get(iterID+".run"))
-                    else:
-                        desModelOut = modelOut
-
-                    finalOut = state.post(modelOut)
-
-                    if serialize:
-                        kv.set(iterID+".final", pickle.dumps(finalOut))
-
-                if serialize:
-                    kv.delete(iterID+".pre", iterID+".run", iterID+".final")
-            else:
+            with timer("pre", profTimes):
                 processed = state.pre(testIn)
-                modelOut = state.run(processed)
+                objStore.put(iterID+".pre", processed)
+
+            with timer("run", profTimes):
+                desProcessed = objStore.get(iterID+".pre")
+
+                modelOut = state.run(desProcessed)
+
+                objStore.put(iterID+".run", modelOut)
+
+            with timer("post", profTimes):
+                desModelOut = objStore.get(iterID+".run")
+
                 finalOut = state.post(modelOut)
 
+                objStore.put(iterID+".final", finalOut)
 
-def main(model, profile=False, niter=1, use_gpu=True, serialize=False):
-    if profile:
-        times = {}
+            objStore.delete(iterID+".pre", iterID+".run", iterID+".final")
         
-        with timer("imports", times):
-            model.imports()
 
-        with timer("init", times):
-            if use_gpu:
-                state = model(profile=profile, provider="CUDAExecutionProvider") 
-            else:
-                state = model(profile=profile, provider="CPUExecutionProvider") 
-
-        with timer("run", times):
-            runTest(state, niter=niter, profTimes=times, serialize=serialize)
-
-        prof_file = state.session.end_profiling()
-        print("onnxruntime profile at: ", prof_file)
-        print("Times (ms): ")
-        print({ name : v.mean() for name, v in times.items() })
+def main(model, niter=1, use_gpu=True, serialize=False):
+    if serialize:
+        objStore = fakefaas.kv.Redis(pwd="Cd+OBWBEAXV0o2fg5yDrMjD9JUkW7J6MATWuGlRtkQXk/CBvf2HYEjKDYw4FC+eWPeVR8cQKWr7IztZy", serialize=True)
     else:
+        objStore = fakefaas.kv.Local(copyObjs=False, serialize=False)
+
+    times = {}
+    
+    with timer("imports", times):
         model.imports()
+
+    with timer("init", times):
         if use_gpu:
-            state = model(profile=profile, provider="CUDAExecutionProvider") 
+            state = model(provider="CUDAExecutionProvider") 
         else:
-            state = model(profile=profile, provider="CPUExecutionProvider") 
-        runTest(state, niter=niter, serialize=serialize)
+            state = model(provider="CPUExecutionProvider") 
+
+    with timer("run", times):
+        runTest(state, objStore, times, niter=niter)
+
+    # prof_file = state.session.end_profiling()
+    # print("onnxruntime profile at: ", prof_file)
+
+    print("Times (ms): ")
+    print({ name : v.mean() for name, v in times.items() })
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test script for faas-like onnxruntime benchmarking")
     parser.add_argument("-c", "--cpu", action='store_true',
             help="use CPU execution provider (rather than the default CUDA provider)")
-    parser.add_argument("-p", "--profile", action='store_true', help="Enable self-profiling")
     parser.add_argument("-n", "--niter", type=int, default=1, help="Number of test iterations to perform")
     parser.add_argument("-m", "--model", type=str, default="ferplus", help="Which model to run, either 'bertsquad' or 'ferplus'")
     parser.add_argument("-s", "--serialize", action='store_true', help="Serialize data (and store in kv store) in between steps. You must have a redis server running for this.")
@@ -126,9 +107,9 @@ if __name__ == "__main__":
     elif args.model == "bertsquad":
         model = bertsquad.Model
 
-    main(model, profile=args.profile, niter=args.niter, use_gpu = not args.cpu, serialize=args.serialize)
+    main(model, niter=args.niter, use_gpu = not args.cpu, serialize=args.serialize)
 
     # Cprofile
     # profFile = "fer10kGPU.prof"
-    # cProfile.runctx("main(profile=False, niter=niter)", globals=globals(), locals=locals(), sort="cumulative", filename=profFile)
+    # cProfile.runctx("main(model, niter=args.niter, use_gpu = not args.cpu, serialize=args.serialize)", filename=profFile)
     # print("Profile at: ", profFile)

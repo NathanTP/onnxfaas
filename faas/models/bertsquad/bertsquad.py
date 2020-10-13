@@ -42,12 +42,13 @@ class Model:
             gi()
 
 
-    def __init__(self, profile=False, provider="CUDAExecutionProvider"):
+    def __init__(self, provider="CUDAExecutionProvider"):
         self.tokenizer = tokenization.FullTokenizer(vocab_file=str(modulePath / 'uncased' / 'vocab.txt'), do_lower_case=True)
 
         opts = onnxruntime.SessionOptions()
         opts.optimized_model_filepath = str(modulePath / "optModel.onnx")
-        # opts.enable_profiling = profile 
+        # opts.enable_profiling = True
+
         modelPath = modulePath / 'bertsquad-10.onnx'
 
         self.session = onnxruntime.InferenceSession(

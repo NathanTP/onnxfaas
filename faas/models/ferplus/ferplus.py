@@ -57,12 +57,12 @@ class Model:
             gi()
         
 
-    def __init__(self, profile=False, provider="CUDAExecutionProvider"):
+    def __init__(self, provider="CUDAExecutionProvider"):
         opts = onnxruntime.SessionOptions()
         opts.optimized_model_filepath = "optModel.onnx"
+        # opts.enable_profiling = True 
 
         print("Provider: ", provider)
-        # opts.enable_profiling = profile 
 
         # ferModelPath="./optModel.onnx"
         ferSession = onnxruntime.InferenceSession(
