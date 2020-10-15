@@ -21,6 +21,10 @@ max_answer_length = 30
 # this file.
 sys.path.append(str(pathlib.Path(__file__).resolve().parent))
 
+# Allow importing fakefaas
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent.parent))
+import fakefaas as ff
+
 class GlobalImport:
     """Allows you to import modules in a function and have them put in the global context. Good for conditional imports. We use it to abstract imports into their own function for profiling purposes.
     Taken from: Rafal Grabie https://stackoverflow.com/questions/11990556/how-to-make-global-imports-from-a-function"""
@@ -47,8 +51,9 @@ class Model:
             gi()
 
 
-    def __init__(self, provider="CUDAExecutionProvider"):
-        Model.imports()
+    def __init__(self, provider="CUDAExecutionProvider", profTimes=None):
+        with ff.timer("imports", profTimes):
+            Model.imports()
 
         self.tokenizer = tokenization.FullTokenizer(vocab_file=str(modulePath / 'uncased' / 'vocab.txt'), do_lower_case=True)
 
@@ -58,10 +63,11 @@ class Model:
 
         modelPath = modulePath / 'bertsquad-10.onnx'
 
-        self.session = onnxruntime.InferenceSession(
-                str(modelPath),
-                sess_options = opts,
-                providers=[provider])
+        with ff.timer("onnxruntime_session_init", profTimes):
+            self.session = onnxruntime.InferenceSession(
+                    str(modelPath),
+                    sess_options = opts,
+                    providers=[provider])
 
 
     def pre(self, raw):
@@ -117,8 +123,5 @@ class Model:
 
 
 if __name__ == "__main__":
-    # Allow importing fakefaas
-    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent.parent))
-
     import fakefaas.invoke
     fakefaas.invoke.remoteServer(Model)

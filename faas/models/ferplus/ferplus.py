@@ -3,6 +3,10 @@ import sys
 import json
 import signal
 
+# Allow importing fakefaas
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent.parent))
+import fakefaas as ff
+
 modulePath = pathlib.Path(__file__).parent.resolve()
 ferModelPath = modulePath / 'emotion_ferplus' / "model.onnx"
 
@@ -60,17 +64,19 @@ class Model:
             gi()
         
 
-    def __init__(self, provider="CUDAExecutionProvider"):
-        Model.imports()
+    def __init__(self, provider="CUDAExecutionProvider", profTimes=None):
+        with ff.timer("imports", profTimes):
+            Model.imports()
+
         opts = onnxruntime.SessionOptions()
         opts.optimized_model_filepath = "optModel.onnx"
         # opts.enable_profiling = True 
 
-        # ferModelPath="./optModel.onnx"
-        ferSession = onnxruntime.InferenceSession(
-                str(ferModelPath),
-                sess_options=opts,
-                providers=[provider])
+        with ff.timer("onnxruntime_session_init", profTimes):
+            ferSession = onnxruntime.InferenceSession(
+                    str(ferModelPath),
+                    sess_options=opts,
+                    providers=[provider])
 
         self.session = ferSession
         self.inputName = ferSession.get_inputs()[0].name
@@ -103,8 +109,6 @@ class Model:
 
 
 if __name__ == "__main__":
-    # Allow importing fakefaas
-    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent.parent))
 
     import fakefaas.invoke
     fakefaas.invoke.remoteServer(Model)

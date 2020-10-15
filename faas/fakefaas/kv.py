@@ -2,6 +2,7 @@ import redis
 import pickle
 import abc
 import copy
+from .util import *
 
 class kv(abc.ABC):
     """A bare-bones key-value store abstraction."""
@@ -41,22 +42,29 @@ class Redis:
         self.serialize = serialize
 
 
-    def put(self, k, v):
-        if self.serialize:
-            v = pickle.dumps(v)
-        self.handle.set(k, v)
+    def put(self, k, v, profile=None):
+        with timer("serialize", profile):
+            if self.serialize:
+                v = pickle.dumps(v)
+
+        with timer("write", profile):
+            self.handle.set(k, v)
 
 
-    def get(self, k):
-        raw = self.handle.get(k)
-        if self.serialize:
-            return pickle.loads(raw)
-        else:
-            return raw
+    def get(self, k, profile=None):
+        with timer("read", profile):
+            raw = self.handle.get(k)
+
+        with timer("deserialize", profile):
+            if self.serialize:
+                return pickle.loads(raw)
+            else:
+                return raw
 
 
-    def delete(self, *keys):
-        self.handle.delete(*keys)
+    def delete(self, *keys, profile=None):
+        with timer("delete", profile):
+            self.handle.delete(*keys)
 
 class Local:
     """A baseline "local" kv store. Really just a dictionary. Note: no copy is
@@ -73,25 +81,31 @@ class Local:
         self.serialize = serialize 
 
 
-    def put(self, k, v):
-        if self.serialize:
-             v = pickle.dumps(v)
-        elif self.copy:
-             v = copy.deepcopy(v)
+    def put(self, k, v, profile=None):
+        with timer("serialize", profile):
+            if self.serialize:
+                 v = pickle.dumps(v)
+            elif self.copy:
+                 v = copy.deepcopy(v)
 
-        self.store[k] = v
-
-
-    def get(self, k):
-        raw = self.store[k]
-        if self.serialize:
-            return pickle.loads(raw)
-        elif self.copy:
-            return copy.deepcopy(raw)
-        else:
-            return raw
+        with timer("write", profile):
+            self.store[k] = v
 
 
-    def delete(self, *keys):
-        for k in keys:
-            del self.store[k]
+    def get(self, k, profile=None):
+        with timer("read", profile):
+            raw = self.store[k]
+
+        with timer("deserialize", profile):
+            if self.serialize:
+                return pickle.loads(raw)
+            elif self.copy:
+                return copy.deepcopy(raw)
+            else:
+                return raw
+
+
+    def delete(self, *keys, profile=None):
+        with timer("delete", profile):
+            for k in keys:
+                del self.store[k]

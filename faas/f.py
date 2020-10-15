@@ -10,35 +10,6 @@ import fakefaas
 import fakefaas.kv
 import fakefaas.invoke
 
-class prof:
-    def __init__(self):
-        self.total = 0.0
-        self.ncall = 0
-
-    def increment(self, n):
-        self.total += n
-        self.ncall += 1
-
-    def total(self):
-        return self.total
-
-    def mean(self):
-        return self.total / self.ncall
-
-# ms
-timeScale = 1000
-
-@contextmanager
-def timer(name, timers):
-   start = time.time() * timeScale 
-   try:
-       yield
-   finally:
-       if name not in timers:
-           timers[name] = prof()
-       timers[name].increment((time.time()*timeScale) - start)
-
-
 def runTest(state, objStore, profTimes, niter=1):
     # This is generally not counted against runtime as we assume the inputs are
     # already loaded somewhere
@@ -46,23 +17,23 @@ def runTest(state, objStore, profTimes, niter=1):
     inputKey = state.inputs("runTest")
 
     for repeat in range(niter):
-        with timer("e2e", profTimes):
+        with fakefaas.timer("e2e", profTimes):
             iterID = str(repeat) 
 
-            with timer("pre", profTimes):
+            with fakefaas.timer("pre", profTimes):
                 processedKey = state.pre(iterID, inputKey=inputKey)
 
-            with timer("run", profTimes):
+            with fakefaas.timer("run", profTimes):
                 modelOutKey = state.run(iterID)
 
-            with timer("post", profTimes):
+            with fakefaas.timer("post", profTimes):
                 finalKey = state.post(iterID)
 
         objStore.delete(processedKey, modelOutKey, finalKey)
 
     objStore.delete(inputKey)
-    state.close()
-        
+    stateTimes = state.close()
+    fakefaas.mergeTimers(profTimes, stateTimes, "model.")   
 
 def main(args):
     if args.serialize:
@@ -77,20 +48,21 @@ def main(args):
 
     times = {}
     
-    with timer("init", times):
+    with fakefaas.timer("init", times):
+        modelTimes = {}
         if args.remote:
             state = fakefaas.invoke.RemoteModel(args.model, objStore, provider=provider)
         else:
             state = fakefaas.invoke.LocalModel(args.model, objStore, provider=provider)
 
-    with timer("run", times):
+    with fakefaas.timer("run", times):
         runTest(state, objStore, times, niter=args.niter)
 
     # prof_file = state.session.end_profiling()
     # print("onnxruntime profile at: ", prof_file)
 
     print("Times (ms): ")
-    print({ name : v.mean() for name, v in times.items() })
+    fakefaas.printTimers(times)
 
 
 if __name__ == "__main__":
