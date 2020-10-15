@@ -1,4 +1,5 @@
 import pathlib
+import sys
 
 """This uses the bert_squad model for question/answer over plain text. Input is
    a json file with the text to parse and a set of questions to ask. The model
@@ -15,6 +16,10 @@ batch_size = 1
 n_best_size = 20
 max_answer_length = 30
 
+# Python modules make no sense. I'm sure this is breaking something but
+# whatever. All I want is to be able to import files in the same directory as
+# this file.
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
 
 class GlobalImport:
     """Allows you to import modules in a function and have them put in the global context. Good for conditional imports. We use it to abstract imports into their own function for profiling purposes.
@@ -36,13 +41,15 @@ class Model:
     def imports():
         with GlobalImport() as gi:
             import onnxruntime, onnx, json
-            from . import tokenization
-            from . import run_onnx_squad as rs
+            import tokenization
+            import run_onnx_squad as rs
             import numpy as np
             gi()
 
 
     def __init__(self, provider="CUDAExecutionProvider"):
+        Model.imports()
+
         self.tokenizer = tokenization.FullTokenizer(vocab_file=str(modulePath / 'uncased' / 'vocab.txt'), do_lower_case=True)
 
         opts = onnxruntime.SessionOptions()
@@ -106,4 +113,12 @@ class Model:
         with open(modulePath / "example.json", 'r') as f:
             raw = f.read()
 
-        return [raw]
+        return raw
+
+
+if __name__ == "__main__":
+    # Allow importing fakefaas
+    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent.parent))
+
+    import fakefaas.invoke
+    fakefaas.invoke.remoteServer(Model)

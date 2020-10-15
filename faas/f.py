@@ -8,6 +8,7 @@ import redis
 import pickle
 import fakefaas
 import fakefaas.kv
+import fakefaas.invoke
 
 class prof:
     def __init__(self):
@@ -39,51 +40,51 @@ def timer(name, timers):
 
 
 def runTest(state, objStore, profTimes, niter=1):
-    inputs = state.inputs()
+    # This is generally not counted against runtime as we assume the inputs are
+    # already loaded somewhere
+    # inputs = state.inputs()
+    inputKey = state.inputs("runTest")
 
     for repeat in range(niter):
-        for i, testIn in enumerate(inputs):
-            iterID = "{}.{}".format(repeat, i)
+        with timer("e2e", profTimes):
+            iterID = str(repeat) 
+
             with timer("pre", profTimes):
-                processed = state.pre(testIn)
-                objStore.put(iterID+".pre", processed)
+                processedKey = state.pre(iterID, inputKey=inputKey)
 
             with timer("run", profTimes):
-                desProcessed = objStore.get(iterID+".pre")
-
-                modelOut = state.run(desProcessed)
-
-                objStore.put(iterID+".run", modelOut)
+                modelOutKey = state.run(iterID)
 
             with timer("post", profTimes):
-                desModelOut = objStore.get(iterID+".run")
+                finalKey = state.post(iterID)
 
-                finalOut = state.post(modelOut)
+        objStore.delete(processedKey, modelOutKey, finalKey)
 
-                objStore.put(iterID+".final", finalOut)
-
-            objStore.delete(iterID+".pre", iterID+".run", iterID+".final")
+    objStore.delete(inputKey)
+    state.close()
         
 
-def main(model, niter=1, use_gpu=True, serialize=False):
-    if serialize:
+def main(args):
+    if args.serialize:
         objStore = fakefaas.kv.Redis(pwd="Cd+OBWBEAXV0o2fg5yDrMjD9JUkW7J6MATWuGlRtkQXk/CBvf2HYEjKDYw4FC+eWPeVR8cQKWr7IztZy", serialize=True)
     else:
         objStore = fakefaas.kv.Local(copyObjs=False, serialize=False)
 
+    if args.cpu:
+        provider = "CPUExecutionProvider"
+    else:
+        provider = "CUDAExecutionProvider"
+
     times = {}
     
-    with timer("imports", times):
-        model.imports()
-
     with timer("init", times):
-        if use_gpu:
-            state = model(provider="CUDAExecutionProvider") 
+        if args.remote:
+            state = fakefaas.invoke.RemoteModel(args.model, objStore, provider=provider)
         else:
-            state = model(provider="CPUExecutionProvider") 
+            state = fakefaas.invoke.LocalModel(args.model, objStore, provider=provider)
 
     with timer("run", times):
-        runTest(state, objStore, times, niter=niter)
+        runTest(state, objStore, times, niter=args.niter)
 
     # prof_file = state.session.end_profiling()
     # print("onnxruntime profile at: ", prof_file)
@@ -98,16 +99,15 @@ if __name__ == "__main__":
             help="use CPU execution provider (rather than the default CUDA provider)")
     parser.add_argument("-n", "--niter", type=int, default=1, help="Number of test iterations to perform")
     parser.add_argument("-m", "--model", type=str, default="ferplus", help="Which model to run, either 'bertsquad' or 'ferplus'")
+    parser.add_argument("-r", "--remote", action='store_true', help="Run the model as a remote executor rather than in the same process. remote==True implies serialize.")
     parser.add_argument("-s", "--serialize", action='store_true', help="Serialize data (and store in kv store) in between steps. You must have a redis server running for this.")
 
     args = parser.parse_args()
 
-    if args.model == "ferplus":
-        model = ferplus.Model
-    elif args.model == "bertsquad":
-        model = bertsquad.Model
+    if args.remote:
+        args.serialize = True
 
-    main(model, niter=args.niter, use_gpu = not args.cpu, serialize=args.serialize)
+    main(args)
 
     # Cprofile
     # profFile = "fer10kGPU.prof"

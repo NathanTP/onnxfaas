@@ -39,7 +39,7 @@ from timeit import default_timer as timer
 import numpy as np
 import onnxruntime as onnxrt
 import six
-from . import tokenization
+import tokenization
 
 
 RawResult = collections.namedtuple("RawResult", ["unique_id", "start_logits", "end_logits"])
